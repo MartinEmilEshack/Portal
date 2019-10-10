@@ -2,14 +2,13 @@ package Portal.Network;
 
 import Portal.FileManagement.FileBytes;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
-public class ReceivePort{
+public class ReceivePort {
 
     private static final int LOGIN_DATA_PORT = 5876;
     private static final int FILES_PORT = 5877;
@@ -17,56 +16,66 @@ public class ReceivePort{
     private static int password = 0;
     public static Thread fileInputThread = null;
 
-    private static class LoginDataReceiver implements Runnable{
+    private static boolean stop = false;
+
+    private static class LoginDataReceiver implements Runnable {
+
+        private ServerSocket server = null;
+        private Socket sender = null;
+        private DataInputStream input = null;
+        private DataOutputStream output = null;
 
         @Override
         public void run() {
-            ServerSocket server = null;
-            Socket sender = null;
-            DataInputStream input = null;
-            DataOutputStream output = null;
-            try{
-                server = new ServerSocket(LOGIN_DATA_PORT);
-                sender = server.accept();
-                input = new DataInputStream(sender.getInputStream());
-                output = new DataOutputStream(sender.getOutputStream());
-                while(true){
-                    byte[] passwordBytes = new byte[input.available()];
-                    int bytes = input.read(passwordBytes);
-                    ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES);
-                    buffer.put(passwordBytes);
-                    buffer.flip();
-                    if(buffer.getInt() != getPassword()){
-                        output.write(("WRONG_PASSWORD").getBytes());
-                    }else{
-                        fileInputThread = new Thread(new FileDataReceiver());
-                        fileInputThread.run();
-                        output.write(("START_FILE_TRANSMITION").getBytes());
-                        break;
+
+            while (!stop) {
+                try {
+                    server = new ServerSocket(LOGIN_DATA_PORT);
+                    server.setSoTimeout(5000);
+                    sender = server.accept();
+
+                    input = new DataInputStream(sender.getInputStream());
+                    output = new DataOutputStream(sender.getOutputStream());
+
+                    int sentPassword = input.readInt();
+//                    System.out.println("Massage Sent " + sentPassword);
+
+                    if (sentPassword == getPassword()) {
+//                        fileInputThread = new Thread(new FileDataReceiver());
+//                        fileInputThread.run();
+                        output.writeInt(1);
+//                        System.out.println("Wright password");
+                    } else {
+                        output.writeInt(0);
+                    }
+                    output.flush();
+                } catch (EOFException EOFE) {
+                    EOFE.printStackTrace();
+                } catch (SocketTimeoutException STE){
+
+                } catch (IOException IOE) {
+                    IOE.printStackTrace();
+                } finally {
+                    try {
+                        if (input != null)
+                            input.close();
+                        if (output != null)
+                            output.close();
+                        if (sender != null)
+                            sender.close();
+                        if (server != null)
+                            server.close();
+                    } catch (IOException IOE) {
+                        IOE.printStackTrace();
                     }
                 }
-                output.flush();
-            }catch (IOException IOE){
-                IOE.printStackTrace();
-            }finally {
-                try {
-                    if (input != null)
-                        input.close();
-                    if (output != null)
-                        output.close();
-                    if (sender != null)
-                        sender.close();
-                    if (server != null)
-                        server.close();
-                }catch (IOException IOE){
-                    IOE.printStackTrace();
-                }
+//                System.out.println("bla bla");
             }
+            System.out.println("Receiver stopped");
         }
-
     }
 
-    private static class FileDataReceiver implements Runnable{
+    private static class FileDataReceiver implements Runnable {
 
         @Override
         public void run() {
@@ -80,22 +89,27 @@ public class ReceivePort{
                 sender = server.accept();
                 input = new DataInputStream(sender.getInputStream());
                 output = new DataOutputStream(sender.getOutputStream());
+
                 byte[] fileName = new byte[input.available()];
                 int bytes = 0;
                 bytes = bytes + input.read(fileName);
+
                 byte[] fileSize = new byte[input.available()];
                 bytes = bytes + input.read(fileSize);
+
                 byte[] file = new byte[input.available()];
                 bytes = bytes + input.read(file);
+
                 FileBytes fileBytes = new FileBytes();
                 fileBytes.fileName = fileName;
                 fileBytes.fileSize = fileSize;
                 fileBytes.file = file;
+
                 output.write("FILE_TRANSFER_COMPLETED".getBytes());
                 output.flush();
-            }catch(IOException IOE){
+            } catch (IOException IOE) {
                 IOE.printStackTrace();
-            }finally {
+            } finally {
                 try {
                     Thread loginDataThread = new Thread(new LoginDataReceiver());
                     loginDataThread.run();
@@ -107,7 +121,7 @@ public class ReceivePort{
                         sender.close();
                     if (server != null)
                         server.close();
-                }catch (IOException IOE){
+                } catch (IOException IOE) {
                     IOE.printStackTrace();
                 }
             }
@@ -117,17 +131,22 @@ public class ReceivePort{
 
     }
 
-    public static Runnable startLoginDataReceiver(){
+    public static Runnable startLoginDataReceiver() {
         return new LoginDataReceiver();
     }
 
-    public static void generatePassword(){
-        double password = Math.random()*10;
+    public static void generatePassword() {
+        double password = Math.random() * 1000000;
         ReceivePort.password =  (int) password;
+//        ReceivePort.password = 1234;
     }
 
-    public static int getPassword(){
+    public static int getPassword() {
         return ReceivePort.password;
+    }
+
+    public static void close(){
+        stop = true;
     }
 
 }

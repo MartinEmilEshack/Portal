@@ -1,16 +1,19 @@
 package Portal.UI;
 
 import Portal.Network.ReceivePort;
+import Portal.Network.SendPort;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
+import java.util.Scanner;
+
 public class Main extends Application {
 
     @Override
-    public void start(Stage primaryStage) throws Exception{
+    public void start(Stage primaryStage) throws Exception {
 //        Thread loginDataReceiver = new Thread(ReceivePort.startLoginDataReceiver());
 //        loginDataReceiver.setDaemon(true);
 //        loginDataReceiver.run();
@@ -23,7 +26,22 @@ public class Main extends Application {
 
     public static void main(String[] args) {
         ReceivePort.generatePassword();
-        launch(args);
+        Thread thread = new Thread(ReceivePort.startLoginDataReceiver());
+        thread.start();
+
+        Scanner input = new Scanner(System.in);
+        int password;
+        boolean success = false;
+
+        while (!success) {
+            System.out.println("Enter Password: -> "+ReceivePort.getPassword());
+            password = input.nextInt();
+            success = SendPort.sendRequest("127.0.0.1", password, null);
+        }
+        ReceivePort.close();
+//        System.out.println("main while finished");
+//        System.out.println(thread.isAlive());
+//        launch(args);
     }
 
 }
