@@ -13,51 +13,10 @@ public class SendPort {
     private static final int FILES_PORT = 5877;
 
     private static String IP = null;
-    private static FileBytes fileBytes = null;
 
-    private static class FileDataSender implements Runnable {
+    public static boolean sendRequest(String IP,int password,String fileName){
 
-        @Override
-        public void run() {
-            Socket receiver = null;
-            DataOutputStream output = null;
-            DataInputStream input = null;
-            SendPort.fileBytes = new FileBytes();
-            try {
-                receiver = new Socket(IP,FILES_PORT);
-
-                output = new DataOutputStream(receiver.getOutputStream());
-                input = new DataInputStream(receiver.getInputStream());
-
-                byte[] fileSentConfirm = new byte[2];
-                while (!(new String(fileSentConfirm)).equals("FILE_TRANSFER_COMPLETED")) {
-                    output.write(SendPort.fileBytes.fileName);
-                    output.write(SendPort.fileBytes.fileSize);
-                    output.write(SendPort.fileBytes.file);
-                    fileSentConfirm = new byte[input.available()];
-                    int bytes = input.read(fileSentConfirm);
-                }
-            }catch(IOException IOE){
-                IOE.printStackTrace();
-            }finally {
-                try {
-                    if (input != null)
-                        input.close();
-                    if (output != null)
-                        output.close();
-                    if (receiver != null)
-                        receiver.close();
-                }catch (IOException IOE){
-                    IOE.printStackTrace();
-                }
-            }
-        }
-
-    }
-
-    public static boolean sendRequest(String IP,int password,FileBytes fileBytes){
-
-        SendPort.fileBytes = fileBytes;
+//        FileBytes fileSent = fileBytes;
         SendPort.IP = IP;
 
         Socket sender = null;
@@ -75,20 +34,17 @@ public class SendPort {
             int requestResponse = input.readInt();
 
 //            System.out.println("Send Response -> "+requestResponse);
-
+            output.flush();
             if (requestResponse == 0) {
-                output.flush();
                 System.err.println("Wrong password !");
 //                throw new IOException("WRONG_PASSWORD");
                 return false;
             }else if(requestResponse == 1){
-                output.flush();
                 System.out.println("Password is correct, starting sending files");
+                Thread fileSending = new Thread(new FileDataSender(fileName));
+                fileSending.start();
                 return true;
-//                Thread fileSending = new Thread(new FileDataSender());
-//                fileSending.start();
             }else{
-                output.flush();
                 System.err.println("Unknown response ! -> "+requestResponse);
                 return false;
 //                throw new IOException("UNKNOWN_RESPONSE");
@@ -111,7 +67,73 @@ public class SendPort {
         }
     }
 
-    public static String getLocalIP()throws UnknownHostException {
+    private static class FileDataSender implements Runnable {
+
+        private String fileName;
+
+        FileDataSender(String fileName){
+            this.fileName = fileName;
+        }
+
+        @Override
+        public void run() {
+
+            FileBytes fileSent = null;
+
+            Socket sender = null;
+
+            DataOutputStream output = null;
+            BufferedOutputStream outputBuffered = null;
+
+            try {
+                sender = new Socket(IP,FILES_PORT);
+
+                output = new DataOutputStream(sender.getOutputStream());
+                outputBuffered = new BufferedOutputStream(sender.getOutputStream());
+
+                fileSent = new FileBytes(fileName,false);
+
+                output.writeUTF(fileSent.getFileName());
+                output.writeLong(fileSent.getFileSize());
+
+                byte[] fileBytes = new byte[10];
+                int bytesBuffered;
+                int bytesSent = 0;
+
+                while (true) {
+                    bytesBuffered = fileSent.getBufferedBytes(fileBytes);
+                    if(bytesBuffered > 0){
+                        bytesSent += bytesBuffered;
+                        outputBuffered.write(fileBytes,0,bytesBuffered);
+                    }else break;
+                }
+
+                output.flush();
+                outputBuffered.flush();
+
+            }catch(IOException IOE){
+                IOE.printStackTrace();
+            }finally {
+                try {
+//                    if (input != null)
+//                        input.close();
+                    if(fileSent != null)
+                        fileSent.close();
+                    if (output != null)
+                        output.close();
+                    if(outputBuffered != null)
+                        outputBuffered.close();
+                    if (sender != null)
+                        sender.close();
+                }catch (IOException IOE){
+                    IOE.printStackTrace();
+                }
+            }
+        }
+
+    }
+
+    public static String getPublicIP()throws UnknownHostException {
         InetAddress inetAddress = InetAddress.getLocalHost();
         return inetAddress.getHostAddress();
     }

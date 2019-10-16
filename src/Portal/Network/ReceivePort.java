@@ -5,7 +5,6 @@ import Portal.FileManagement.FileBytes;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 
 public class ReceivePort {
@@ -13,10 +12,8 @@ public class ReceivePort {
     private static final int LOGIN_DATA_PORT = 5876;
     private static final int FILES_PORT = 5877;
 
-    private static int password = 0;
-    public static Thread fileInputThread = null;
-
     private static boolean stop = false;
+    private static int password = 0;
 
     private static class LoginDataReceiver implements Runnable {
 
@@ -41,8 +38,8 @@ public class ReceivePort {
 //                    System.out.println("Massage Sent " + sentPassword);
 
                     if (sentPassword == getPassword()) {
-//                        fileInputThread = new Thread(new FileDataReceiver());
-//                        fileInputThread.run();
+                        Thread fileInputThread = new Thread(new FileDataReceiver());
+                        fileInputThread.start();
                         output.writeInt(1);
 //                        System.out.println("Wright password");
                     } else {
@@ -81,51 +78,79 @@ public class ReceivePort {
         public void run() {
 
             ServerSocket server = null;
-            Socket sender = null;
+            Socket receiver = null;
+
             DataInputStream input = null;
-            DataOutputStream output = null;
+            BufferedInputStream inputBuffered = null;
+
+            FileBytes fileReceived = null;
+
             try {
+
                 server = new ServerSocket(FILES_PORT);
-                sender = server.accept();
-                input = new DataInputStream(sender.getInputStream());
-                output = new DataOutputStream(sender.getOutputStream());
+                server.setSoTimeout(5000);
+                receiver = server.accept();
 
-                byte[] fileName = new byte[input.available()];
-                int bytes = 0;
-                bytes = bytes + input.read(fileName);
+                input = new DataInputStream(receiver.getInputStream());
+                inputBuffered = new BufferedInputStream(receiver.getInputStream());
 
-                byte[] fileSize = new byte[input.available()];
-                bytes = bytes + input.read(fileSize);
 
-                byte[] file = new byte[input.available()];
-                bytes = bytes + input.read(file);
 
-                FileBytes fileBytes = new FileBytes();
-                fileBytes.fileName = fileName;
-                fileBytes.fileSize = fileSize;
-                fileBytes.file = file;
+                fileReceived = new FileBytes(input.readUTF(),true);
+                long fileSize = input.readLong();
 
-                output.write("FILE_TRANSFER_COMPLETED".getBytes());
-                output.flush();
+                byte[] fileBytes = new byte[10];
+                int bytesBuffered;
+                int bytesReceived = 0;
+
+                while (true) {
+                    bytesBuffered = inputBuffered.read(fileBytes);
+                    if(bytesBuffered > 0){
+                        bytesReceived += bytesBuffered;
+//                        System.out.println(new String(fileBytes));
+                        fileReceived.setBufferedBytes(fileBytes,bytesBuffered);
+                    }else break;
+                }
+                System.out.println(fileReceived.getFileName()+" file was received successfully with size "+bytesReceived);
+//                byte[] fileBytes = new byte[10];
+//                int bytes = 0;
+//                bytes = bytes + input.read(fileName);
+//
+//                byte[] fileSize = new byte[input.available()];
+//                bytes = bytes + input.read(fileSize);
+//
+//                byte[] file = new byte[input.available()];
+//                bytes = bytes + input.read(file);
+//
+//                FileBytes fileBytes = new FileBytes();
+//                fileBytes.fileName = fileName;
+//                fileBytes.fileSize = fileSize;
+//                fileBytes.file = file;
+
+//                output.write("FILE_TRANSFER_COMPLETED".getBytes());
+//                output.flush();
             } catch (IOException IOE) {
                 IOE.printStackTrace();
             } finally {
                 try {
-                    Thread loginDataThread = new Thread(new LoginDataReceiver());
-                    loginDataThread.run();
+//                    Thread loginDataThread = new Thread(new LoginDataReceiver());
+//                    loginDataThread.start();
+                    if(fileReceived != null)
+                        fileReceived.close();
                     if (input != null)
                         input.close();
-                    if (output != null)
-                        output.close();
-                    if (sender != null)
-                        sender.close();
+                    if(inputBuffered != null)
+                        inputBuffered.close();
+//                    if (output != null)
+//                        output.close();
+                    if (receiver != null)
+                        receiver.close();
                     if (server != null)
                         server.close();
                 } catch (IOException IOE) {
                     IOE.printStackTrace();
                 }
             }
-
 
         }
 

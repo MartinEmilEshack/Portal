@@ -8,6 +8,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 
+import java.util.InputMismatchException;
 import java.util.Scanner;
 
 public class Main extends Application {
@@ -33,17 +34,25 @@ public class Main extends Application {
         int password;
         boolean success = false;
 
+        System.out.print("Enter file name -> ");
+        String fileName = input.nextLine();
+
         while (!success) {
             System.out.println("Enter Password: -> "+ReceivePort.getPassword());
-            password = input.nextInt();
-            success = SendPort.sendRequest("127.0.0.1", password, null);
+            try {
+                password = input.nextInt();
+                success = SendPort.sendRequest("127.0.0.1", password, fileName);
+            }catch (InputMismatchException inMisE){
+                System.err.println("The password is only 6 digits");
+//                inMisE.printStackTrace();
+                input.next();
+            }
         }
         ReceivePort.close();
 //        System.out.println("main while finished");
 //        System.out.println(thread.isAlive());
 //        launch(args);
     }
-
 }
 
 //Resources: -OneDark Pro color themes(of VS-code)- https://github.com/Binaryify/OneDark-Pro/blob/master/themes/OneDark-Pro.json
